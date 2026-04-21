@@ -1,0 +1,9 @@
+{
+    "jwt": {
+        "secretOrKey": "PROD_SECRET",
+        "issuer": "service",
+        "audience": "service.in",
+        "expiresIn": "7d",
+        "algorithm": "HS256"
+    }
+}
