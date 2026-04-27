@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const Grocery = mongoose.model("Grocery");
 const response = require("../responses");
 
-const withRatingFields = (items) =>
+const withRatingFields = (items, userId = null) =>
   items.map(item => {
     const plain = item.toObject ? item.toObject() : item;
     const reviews = Array.isArray(plain.reviews) ? plain.reviews : [];
@@ -10,8 +10,11 @@ const withRatingFields = (items) =>
     const averageRating = totalReviews > 0
       ? (reviews.reduce((acc, r) => acc + (r.rating || 0), 0) / totalReviews).toFixed(1)
       : null;
+    const isFavorite = userId
+      ? Array.isArray(plain.favorite) && plain.favorite.some(id => id.toString() === userId.toString())
+      : false;
     const { reviews: _r, favorite: _f, ...rest } = plain;
-    return { ...rest, averageRating, totalReviews };
+    return { ...rest, averageRating, totalReviews, isFavorite };
   });
 
 module.exports = {
@@ -90,7 +93,7 @@ if (req?.query?.store_id) {
         .skip((parseInt(page) - 1) * parseInt(limit))
         .lean();
 
-      return response.ok(res, withRatingFields(grocerys));
+      return response.ok(res, withRatingFields(grocerys, userId));
     } catch (error) {
       return response.error(res, error);
     }
@@ -137,7 +140,7 @@ if (req?.query?.store_id) {
         .sort({ createdAt: -1 })
         .limit(limit * 1)
         .skip((page - 1) * limit);
-      return response.ok(res, withRatingFields(product));
+      return response.ok(res, withRatingFields(product, req.user?.id));
     } catch (error) {
       return response.error(res, error);
     }
@@ -188,12 +191,9 @@ if (req?.query?.store_id) {
         favorite: userId,
       })
         .populate("grocerycategory", "name image")
-        .select("-favorite -createdAt -updatedAt -__v");
+        .select("-createdAt -updatedAt -__v");
 
-      if (!favoriteGrocery || favoriteGrocery.length === 0) {
-        return response.badReq(res, { message: "No favorite grocery item found" });
-      }
-      return response.ok(res, favoriteGrocery);
+      return response.ok(res, withRatingFields(favoriteGrocery, userId));
     } catch (error) {
       return response.error(res, error);
     }
@@ -363,7 +363,7 @@ if (req?.query?.store_id) {
   getTopGroceryBySeller: async (req, res) => {
     try {
       const {sellerId} = req.params;
-      const {limit = 10, excludeIds} = req.query;
+      const {limit = 10, excludeIds, userId} = req.query;
 
       const cond = {
         sellerid: mongoose.Types.ObjectId.isValid(sellerId)
@@ -384,10 +384,9 @@ if (req?.query?.store_id) {
       const products = await Grocery.find(cond)
         .populate('grocerycategory seller_profile')
         .sort({sold_pieces: -1})
-        .limit(parseInt(limit))
-        .lean();
+        .limit(parseInt(limit));
 
-      return response.ok(res, products);
+      return response.ok(res, withRatingFields(products, userId));
     } catch (error) {
       return response.error(res, error);
     }
@@ -396,12 +395,13 @@ if (req?.query?.store_id) {
   getTopSoldGrocery: async (req, res) => {
     try {
       const { page = 1, limit = 20 } = req.query;
+      const userId = req.query.userId;
       const products = await Grocery.find({expirydate: { $gte: new Date() }})
         .populate("grocerycategory seller_profile")
         .sort({ sold_pieces: -1 })
         .limit(limit * 1)
         .skip((page - 1) * limit);
-      return response.ok(res, withRatingFields(products));
+      return response.ok(res, withRatingFields(products, userId));
     } catch (error) {
       return response.error(res, error);
     }

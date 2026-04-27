@@ -2,6 +2,21 @@ const mongoose = require("mongoose");
 const Shopping = mongoose.model("Shopping");
 const response = require("../responses");
 
+const withRatingFields = (items, userId = null) =>
+  items.map(item => {
+    const plain = item.toObject ? item.toObject() : item;
+    const reviews = Array.isArray(plain.reviews) ? plain.reviews : [];
+    const totalReviews = reviews.length;
+    const averageRating = totalReviews > 0
+      ? (reviews.reduce((acc, r) => acc + (r.rating || 0), 0) / totalReviews).toFixed(1)
+      : null;
+    const isFavorite = userId
+      ? Array.isArray(plain.favorite) && plain.favorite.some(id => id.toString() === userId.toString())
+      : false;
+    const { reviews: _r, favorite: _f, ...rest } = plain;
+    return { ...rest, averageRating, totalReviews, isFavorite };
+  });
+
 module.exports = {
   createShopping: async (req, res) => {
      try {
@@ -135,18 +150,16 @@ module.exports = {
     try {
       const userId = req.query.userId;
       let data = await Shopping.findById(req?.params?.id).populate("shoppingcategory seller_profile");
-      // let plainData = data.toObject();
-      // if (userId) {
-      //     const isFavorite =
-      //       Array.isArray(data.favorite) &&
-      //       data.favorite.some(
-      //         (favUserId) => favUserId.toString() === userId.toString()
-      //       );
-      //       console.log('isFavorite',isFavorite);
-      //     plainData.isFavorite = isFavorite;
-      // }
-      // return response.ok(res, plainData);
-      return response.ok(res, data);
+      const plain = data.toObject();
+      const reviews = Array.isArray(plain.reviews) ? plain.reviews : [];
+      const totalReviews = reviews.length;
+      const averageRating = totalReviews > 0
+        ? (reviews.reduce((acc, r) => acc + (r.rating || 0), 0) / totalReviews).toFixed(1)
+        : null;
+      const isFavorite = userId
+        ? Array.isArray(plain.favorite) && plain.favorite.some(id => id.toString() === userId.toString())
+        : false;
+      return response.ok(res, { ...plain, averageRating, totalReviews, isFavorite });
     } catch (error) {
       return response.error(res, error);
     }
@@ -166,21 +179,7 @@ if (req?.query?.store_id) {
         .skip((parseInt(page) - 1) * parseInt(limit))
         .lean();
 
-      // if (userId) {
-      //   shoppings = shoppings.map((shopping) => {
-      //     const isFavorite =
-      //       Array.isArray(shopping.favorite) &&
-      //       shopping.favorite.some(
-      //         (favUserId) => favUserId.toString() === userId.toString()
-      //       );
-      //     return {
-      //       ...shopping,
-      //       isFavorite,
-      //     };
-      //   });
-      // }
-
-      return response.ok(res, shoppings);
+      return response.ok(res, withRatingFields(shoppings, userId));
     } catch (error) {
       return response.error(res, error);
     }
@@ -222,24 +221,11 @@ if (req?.query?.store_id) {
         ],
       };
       let product = await Shopping.find(cond)
-      .populate("shoppingcategory seller_profile")
+        .populate("shoppingcategory seller_profile")
         .sort({ createdAt: -1 })
         .limit(limit * 1)
         .skip((page - 1) * limit);
-           if (userId) {
-        product = product.map((shopping) => {
-          const isFavorite =
-            Array.isArray(shopping.favorite) &&
-            shopping.favorite.some(
-              (favUserId) => favUserId.toString() === userId.toString()
-            );
-          return {
-            ...shopping.toObject?.(),
-            isFavorite,
-          };
-        });
-      }
-      return response.ok(res, product);
+      return response.ok(res, withRatingFields(product, userId));
     } catch (error) {
       return response.error(res, error);
     }
@@ -290,12 +276,9 @@ if (req?.query?.store_id) {
         favorite: userId,
       })
         .populate("shoppingcategory", "name image")
-        .select("-favorite -createdAt -updatedAt -__v");
+        .select("-createdAt -updatedAt -__v");
 
-      if (!favoriteShopping || favoriteShopping.length === 0) {
-        return response.badReq(res, { message: "No favorite shopping item found" });
-      }
-      return response.ok(res, favoriteShopping);
+      return response.ok(res, withRatingFields(favoriteShopping, userId));
     } catch (error) {
       return response.error(res, error);
     }
@@ -462,16 +445,16 @@ if (req?.query?.store_id) {
       return response.error(res, error);
     }
   },
-    getTopSoldShopping: async (req, res) => {
+  getTopSoldShopping: async (req, res) => {
     try {
       const { page = 1, limit = 20 } = req.query;
-      // const products = await Product.find({ sold_pieces: { $gte: 1 } }) // Only products with at least 1 sold
+      const userId = req.query.userId;
       const products = await Shopping.find()
-      .populate("shoppingcategory seller_profile")
+        .populate("shoppingcategory seller_profile")
         .sort({ sold_pieces: -1 })
         .limit(limit * 1)
         .skip((page - 1) * limit);
-      return response.ok(res, products);
+      return response.ok(res, withRatingFields(products, userId));
     } catch (error) {
       return response.error(res, error);
     }
