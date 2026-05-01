@@ -275,6 +275,12 @@ router.get(
 );
 router.get("/shoppingSearch", isAuthenticated(["USER", "ADMIN"]), shopping.shoppingSearch);
 router.delete("/deleteShopping/:id", isAuthenticated(["USER"]), shopping.deleteShopping);
+router.post("/shoppingtogglefavorite", isAuthenticated(["USER"]), shopping.togglefavorite);
+router.get("/shoppinggetfavorite", isAuthenticated(["USER"]), shopping.getfavorite);
+router.post("/shoppingaddreview", isAuthenticated(["USER"]), shopping.addreview);
+router.get("/shoppinggetreview/:id", isAuthenticated(["USER"]), shopping.getreview);
+router.get("/shoppinggetreviewbyseller", isAuthenticated(["USER"]), shopping.getreviewByseller);
+router.get("/shoppinggetallreview", isAuthenticated(["USER"]), shopping.getallreview);
 
 // Subscription
 router.post(

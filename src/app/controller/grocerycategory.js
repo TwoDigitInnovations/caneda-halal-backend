@@ -88,6 +88,10 @@ module.exports = {
   getCategoryWithGrocerys: async (req, res) => {
     try {
       const now = new Date();
+      const userId = req.user?.id;
+      const userObjectId = userId && mongoose.Types.ObjectId.isValid(userId)
+        ? new mongoose.Types.ObjectId(userId)
+        : null;
       let category = await GroceryCategory.aggregate([
         {
           $lookup: {
@@ -160,6 +164,9 @@ module.exports = {
                       null,
                     ],
                   },
+                  isFavorite: userObjectId
+                    ? { $in: [userObjectId, { $ifNull: ["$favorite", []] }] }
+                    : false,
                 },
               },
               {
@@ -172,6 +179,7 @@ module.exports = {
                   sold_pieces: 1,
                   averageRating: 1,
                   totalReviews: 1,
+                  isFavorite: 1,
                 },
               },
               { $limit: 6 },

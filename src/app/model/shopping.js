@@ -105,10 +105,20 @@ const shoppingchema = new mongoose.Schema({
             name: { type: String },
             value: { type: String, default: '' }
         }
-    ]
+    ],
+    favorite: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    reviews: [{
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        userProfile: { type: mongoose.Schema.Types.ObjectId, ref: "Profile" },
+        rating: { type: Number, min: 1, max: 5 },
+        comment: { type: String },
+    }, { timestamps: true }],
 }, {
     timestamps: true
 });
+
+shoppingchema.path('favorite').default(() => []);
+shoppingchema.path('reviews').default(() => []);
 
 shoppingchema.set('toJSON', {
     getters: true,
