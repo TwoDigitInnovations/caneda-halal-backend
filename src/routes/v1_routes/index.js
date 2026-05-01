@@ -28,6 +28,8 @@ const coupon = require("../../app/controller/coupon");
 const stripe = require("../../app/controller/stripe");
 const invoice = require("../../app/controller/invoice");
 const shipping = require("../../app/controller/shipping");
+const flightapi = require("../../app/controller/flightapi");
+const bookinghistory = require("../../app/controller/bookinghistory");
 
 
 ////stripe
@@ -623,9 +625,28 @@ router.get("/generateInvoice", invoice.generateInvoice);
 router.get("/generateRideInvoice", invoice.generateRideInvoice);
 
 
+//////Flight API
+router.get("/flight/locations",  isAuthenticated(["USER"]), flightapi.flightLocations);
+router.post("/flight/search",  isAuthenticated(["USER"]), flightapi.searchFlight);
+router.post("/flight/multicity-search",  isAuthenticated(["USER"]), flightapi.multiCitySearch);
+router.post("/flight/fare-quote",  isAuthenticated(["USER"]), flightapi.fareQuote);
+router.get("/flight/fare-rules",   isAuthenticated(["USER"]), flightapi.fareRules);
+router.get("/flight/seat-map",  isAuthenticated(["USER"]), flightapi.seatMap);
+router.post("/flight/book", isAuthenticated(["USER", "ADMIN"]), flightapi.bookFlight);
+router.get("/flight/booking",  isAuthenticated(["USER"]), flightapi.getBookingDetails);
+router.post("/flight/cancellation-charges",  isAuthenticated(["USER"]), flightapi.getCancellationCharges);
+router.post("/flight/cancel",  isAuthenticated(["USER"]), flightapi.cancelBooking);
+
 //////Shipping
 router.post("/createShipping", shipping.createShipping);
 router.post("/updateShipping", shipping.updateShipping);
 router.post("/webhookShippingUpdate", shipping.webhookShippingUpdate);
+
+//////Booking History
+router.post("/createBookingHistory", isAuthenticated(["USER", "ADMIN"]), bookinghistory.createBookingHistory);
+router.get("/getBookingHistoryByUser", isAuthenticated(["USER", "ADMIN"]), bookinghistory.getBookingHistoryByUser);
+router.get("/getBookingHistoryById/:id", isAuthenticated(["USER", "ADMIN"]), bookinghistory.getBookingHistoryById);
+// router.patch("/updateBookingHistoryStatus/:id", isAuthenticated(["USER", "ADMIN"]), bookinghistory.updateBookingHistoryStatus);
+router.get("/dropBookingHistory", isAuthenticated(["ADMIN"]), bookinghistory.dropBookingHistory);   // Danger Zone
 
 module.exports = router;

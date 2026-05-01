@@ -11,7 +11,7 @@ const notificationSchema = new mongoose.Schema({
       },
       type: {
         type: String,
-        enum:['RIDE','FOOD','GROCERY','SHOPPING','DELIVERYRIDER']
+        enum:['RIDE','FOOD','GROCERY','SHOPPING','DELIVERYRIDER','FLIGHT']
       },
       for:[ {
         type: mongoose.Schema.Types.ObjectId,

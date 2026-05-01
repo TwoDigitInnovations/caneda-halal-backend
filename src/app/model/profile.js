@@ -40,6 +40,7 @@ const profileSchema = new mongoose.Schema(
         "SHOPPINGUSER",
         "SHOPPINGSELLER",
         "DELIVERYRIDER",
+        "FLIGHTUSER",
       ],
     },
     user: {
