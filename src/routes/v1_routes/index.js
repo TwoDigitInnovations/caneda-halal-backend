@@ -29,7 +29,9 @@ const stripe = require("../../app/controller/stripe");
 const invoice = require("../../app/controller/invoice");
 const shipping = require("../../app/controller/shipping");
 const flightapi = require("../../app/controller/flightapi");
+const hotelapi = require("../../app/controller/hotelapi");
 const bookinghistory = require("../../app/controller/bookinghistory");
+const passenger = require("../../app/controller/passenger");
 
 
 ////stripe
@@ -637,11 +639,23 @@ router.post("/flight/search",  isAuthenticated(["USER"]), flightapi.searchFlight
 router.post("/flight/multicity-search",  isAuthenticated(["USER"]), flightapi.multiCitySearch);
 router.post("/flight/fare-quote",  isAuthenticated(["USER"]), flightapi.fareQuote);
 router.get("/flight/fare-rules",   isAuthenticated(["USER"]), flightapi.fareRules);
+router.post("/flight/fare-rule",   isAuthenticated(["USER"]), flightapi.fareRule);
 router.get("/flight/seat-map",  isAuthenticated(["USER"]), flightapi.seatMap);
 router.post("/flight/book", isAuthenticated(["USER", "ADMIN"]), flightapi.bookFlight);
+router.post("/flight/ticket-nonlcc", isAuthenticated(["USER", "ADMIN"]), flightapi.ticketNonLcc);
 router.get("/flight/booking",  isAuthenticated(["USER"]), flightapi.getBookingDetails);
 router.post("/flight/cancellation-charges",  isAuthenticated(["USER"]), flightapi.getCancellationCharges);
 router.post("/flight/cancel",  isAuthenticated(["USER"]), flightapi.cancelBooking);
+
+//////Hotel API
+router.get("/hotel/locations", isAuthenticated(["USER"]), hotelapi.hotelLocations);
+router.post("/hotel/search", isAuthenticated(["USER"]), hotelapi.hotelSearch);
+router.post("/hotel/description", isAuthenticated(["USER"]), hotelapi.hotelDescription);
+router.post("/hotel/room-availability", isAuthenticated(["USER"]), hotelapi.roomAvailability);
+router.post("/hotel/check-rate", isAuthenticated(["USER"]), hotelapi.checkRate);
+router.post("/hotel/book", isAuthenticated(["USER", "ADMIN"]), hotelapi.bookHotel);
+router.post("/hotel/booking-detail", isAuthenticated(["USER"]), hotelapi.getBookingDetail);
+router.post("/hotel/cancel", isAuthenticated(["USER"]), hotelapi.cancelBooking);
 
 //////Shipping
 router.post("/createShipping", shipping.createShipping);
@@ -654,5 +668,11 @@ router.get("/getBookingHistoryByUser", isAuthenticated(["USER", "ADMIN"]), booki
 router.get("/getBookingHistoryById/:id", isAuthenticated(["USER", "ADMIN"]), bookinghistory.getBookingHistoryById);
 // router.patch("/updateBookingHistoryStatus/:id", isAuthenticated(["USER", "ADMIN"]), bookinghistory.updateBookingHistoryStatus);
 router.get("/dropBookingHistory", isAuthenticated(["ADMIN"]), bookinghistory.dropBookingHistory);   // Danger Zone
+
+//////Passengers
+router.get("/passengers", isAuthenticated(["USER", "ADMIN"]), passenger.getPassengers);
+router.post("/passengers", isAuthenticated(["USER", "ADMIN"]), passenger.addPassenger);
+router.put("/passengers/:passengerId", isAuthenticated(["USER", "ADMIN"]), passenger.updatePassenger);
+router.delete("/passengers/:passengerId", isAuthenticated(["USER", "ADMIN"]), passenger.deletePassenger);
 
 module.exports = router;

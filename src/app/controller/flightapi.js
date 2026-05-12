@@ -10,7 +10,7 @@ const FLIGHT_API_HEADERS = {
   'Accept': 'application/json',
   'Accept-Encoding': 'gzip',
   'PID': process.env.ADIVAHA_API_PID || 'CanedaHalalBackend',
-  'x-api-key':process.env.ADIVAHA_API_KEY || 'your_api_key',
+  'x-api-key': process.env.ADIVAHA_API_KEY || 'your_api_key',
 };
 
 const flightGet = (params) =>
@@ -84,7 +84,7 @@ async function saveFlightBookingHistory(userId, reqBody, FlightapiData) {
       booking_type: 'FLIGHT',
       booking_ref: pnr || (bookingId ? `BK-${bookingId}` : undefined),
       items: items.length ? items : undefined,
-      status: 'Confirmed',
+      status: reqBody?.status || 'Confirmed',
       total_amount: fare.PublishedFare || null,
       tax: fare.Tax || null,
       final_amount: fare.OfferedFare || fare.PublishedFare || null,
@@ -106,6 +106,7 @@ async function saveFlightBookingHistory(userId, reqBody, FlightapiData) {
     });
 
     await booking.save();
+    return booking
   } catch (err) {
     console.error('Failed to save flight booking history:', err.message);
   }
@@ -148,6 +149,8 @@ module.exports = {
         { action: 'searchFlights' },
         { action: 'flightSearch', adults, children, infants, isoneway, From_IATACODE, To_IATACODE, departure_date, return_date, Flights_category }
       );
+
+      console.log(data)
 
       return handleApiResponse(res, data);
     } catch (err) {
@@ -211,6 +214,23 @@ module.exports = {
     }
   },
 
+  // POST /flight/fare-rule
+  // body: { ResultIndex, TraceId }
+  fareRule: async (req, res) => {
+    try {
+      const { ResultIndex, TraceId } = req.body;
+      if (!ResultIndex) return response.badReq(res, 'ResultIndex is required');
+      if (!TraceId) return response.badReq(res, 'TraceId is required');
+      const { data } = await flightPost(
+        { action: 'fareRule' },
+        { action: 'fareRule', ResultIndex, TraceId },
+      );
+      return handleApiResponse(res, data);
+    } catch (err) {
+      return response.error(res, err?.response?.data || err.message);
+    }
+  },
+
   // GET /flight/seat-map?resultIndex=&traceId=
   seatMap: async (req, res) => {
     try {
@@ -253,30 +273,159 @@ module.exports = {
       }
 
       const action = IsLCC === '1' ? 'ticketForLcc' : 'flightBook';
-
+      const bookPayload = { action, ResultIndex, TraceId, IsLCC, isoneway, isDomestic, IsDomesticReturn, Passengers }
+      console.log(bookPayload)
       const { data } = await flightPost(
         { action },
-        { action, ResultIndex, TraceId, IsLCC, isoneway, isDomestic, IsDomesticReturn, Passengers }
+        bookPayload
       );
-console.log(data)
-      // Auto-save booking history on successful response
+      // return handleApiResponse(res, data);
+      console.log(data)
+
       const isSuccess = data.responseData.Response.Error.ErrorCode === 0;
-      console.log(isSuccess)
+
       if (isSuccess && req.user) {
-        const itinerary = data.responseData.Response.Response.FlightItinerary || {};
+        const bookingResponse = data.responseData.Response.Response;
+        const itinerary = bookingResponse?.FlightItinerary || {};
         const segments = (itinerary.Segments || []).flat();
         const firstSeg = segments[0];
         const lastSeg = segments[segments.length - 1];
         const origin = firstSeg?.Origin?.Airport?.AirportCode || itinerary.Origin || '';
         const destination = lastSeg?.Destination?.Airport?.AirportCode || itinerary.Destination || '';
-        const bookingId = itinerary.BookingId || data.responseData.Response.BookingId || '';
-        const pnr = itinerary.PNR || data.responseData.Response.PNR || '';
+        const bookingId = bookingResponse?.BookingId || itinerary.BookingId || '';
+        const pnr = bookingResponse?.PNR || itinerary.PNR || '';
 
         const notifTitle = 'Booking Confirmed';
         const notifBody = `Your flight ${origin} → ${destination} is confirmed.${bookingId ? ` Booking ID: ${bookingId}.` : ''}${pnr ? ` PNR: ${pnr}.` : ''}`;
+        notify([req.user.id], notifTitle, notifBody, 'FLIGHT').catch(() => { });
 
-        saveFlightBookingHistory(req.user.id, { Passengers, paymentmode, paymentid }, data.responseData).catch(() => {});
-        notify([req.user.id], notifTitle, notifBody, 'FLIGHT').catch(() => {});
+        if (IsLCC !== '1') {
+          // Non-LCC: save history first, then issue ticket server-side
+
+          const bookHistory = await saveFlightBookingHistory(req.user.id, { Passengers, paymentmode, paymentid, status: "Hold" }, data.responseData.Response);
+          console.log(bookHistory)
+
+          return handleApiResponse(res, bookHistory);
+          const order_id = bookHistory?.order_id;
+
+          try {
+            const { data: ticketData } = await flightPost(
+              { action: 'ticketForNonLcc' },
+              {
+                action: 'ticketForNonLcc',
+                PNR: pnr,
+                BookingId: bookingId,
+                order_id,
+                TraceId,
+                IsLCC: '0',
+                isoneway,
+                isDomestic,
+                IsDomesticReturn,
+                Passengers,
+              },
+            );
+
+            const ticketSuccess = ticketData?.responseData?.Response?.Error?.ErrorCode === 0;
+            if (ticketSuccess) {
+              const BookingHistory = mongoose.model('BookingHistory');
+              if (order_id) {
+                BookingHistory.findOneAndUpdate(
+                  { order_id },
+                  {
+                    status: 'Confirmed',
+                    'flight_data.TicketStatus': ticketData?.responseData?.Response?.Response?.TicketStatus ?? null,
+                  },
+                ).catch(() => { });
+              }
+              notify(
+                [req.user.id],
+                'Ticket Issued',
+                `Your flight ticket has been issued.${pnr ? ` Booking ref: ${pnr}.` : ''}`,
+                'FLIGHT',
+              ).catch(() => { });
+            }
+
+            data.ticketResponse = ticketData;
+          } catch (ticketErr) {
+            data.ticketResponse = { error: ticketErr?.response?.data || ticketErr.message };
+          }
+        } else {
+          saveFlightBookingHistory(req.user.id, { Passengers, paymentmode, paymentid, status: "Confirmed" }, data.responseData.Response).catch(() => { });
+        }
+      }
+
+      return handleApiResponse(res, data);
+    } catch (err) {
+      return response.error(res, err || err.message);
+    }
+  },
+
+  // POST /flight/ticket-nonlcc
+  // body: { PNR, BookingId, order_id, TraceId, IsLCC, isoneway, isDomestic, IsDomesticReturn, Passengers }
+  // Issues a ticket for a non-LCC (full-service) carrier after the booking is confirmed.
+  ticketNonLcc: async (req, res) => {
+    try {
+      const {
+        PNR,
+        BookingId,
+        order_id,
+        TraceId,
+        IsLCC = '0',
+        isoneway = 'Yes',
+        isDomestic = 'Yes',
+        IsDomesticReturn = 'No',
+        Passengers,
+        paymentmode,
+        paymentid,
+      } = req.body;
+
+      if (!BookingId) return response.badReq(res, 'BookingId is required');
+      if (!TraceId) return response.badReq(res, 'TraceId is required');
+      if (!Passengers || !Array.isArray(Passengers) || Passengers.length === 0) {
+        return response.badReq(res, 'Passengers array is required');
+      }
+
+      for (const pax of Passengers) {
+        if (!pax.FirstName || !pax.LastName || !pax.PaxType || !pax.ContactNo || !pax.Email) {
+          return response.badReq(res, 'Each passenger must have FirstName, LastName, PaxType, ContactNo and Email');
+        }
+      }
+
+      const { data } = await flightPost(
+        { action: 'ticketForNonLcc' },
+        {
+          action: 'ticketForNonLcc',
+          PNR,
+          BookingId,
+          order_id,
+          TraceId,
+          IsLCC,
+          isoneway,
+          isDomestic,
+          IsDomesticReturn,
+          Passengers,
+        },
+      );
+
+      // On success mark the booking as Ticketed and notify
+      const isSuccess = data?.responseData?.Response?.Error?.ErrorCode === 0;
+      if (isSuccess && req.user) {
+        const BookingHistory = mongoose.model('BookingHistory');
+        const effectiveOrderId = order_id || (BookingId ? `BK-${BookingId}` : null);
+        if (effectiveOrderId) {
+          BookingHistory.findOneAndUpdate(
+            { order_id: effectiveOrderId },
+            { status: 'Ticketed' },
+          ).catch(() => { });
+        }
+
+        const pnrStr = PNR || BookingId;
+        notify(
+          [req.user.id],
+          'Ticket Issued',
+          `Your flight ticket has been issued.${pnrStr ? ` Booking ref: ${pnrStr}.` : ''}`,
+          'FLIGHT',
+        ).catch(() => { });
       }
 
       return handleApiResponse(res, data);
@@ -354,20 +503,20 @@ console.log(data)
       );
 
       const isSuccess = data.responseData?.Response?.ResponseStatus === 1;
-      console.log(isSuccess , req.user)
+      console.log(isSuccess, req.user)
       if (isSuccess && req.user) {
         const BookingHistory = mongoose.model('BookingHistory');
-      const newHistory =  BookingHistory.findOneAndUpdate(
+        const newHistory = BookingHistory.findOneAndUpdate(
           { 'flight_data.BookingId': BookingId },
           { status: 'Cancelled' },
-          {new:true, upsert:true}
-        ).catch(() => {});
+          { new: true, upsert: true }
+        ).catch(() => { });
 
-console.log(newHistory)
+        console.log(newHistory)
 
         const notifTitle = 'Booking Cancelled';
         const notifBody = `Your flight booking (ID: ${BookingId}) has been successfully cancelled. Refund will be processed as per airline policy.`;
-        notify([req.user.id], notifTitle, notifBody, 'FLIGHT').catch(() => {});
+        notify([req.user.id], notifTitle, notifBody, 'FLIGHT').catch(() => { });
       }
 
       return handleApiResponse(res, data);

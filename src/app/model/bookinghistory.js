@@ -33,7 +33,7 @@ const bookinghistorySchema = new mongoose.Schema(
     },
     booking_type: {
       type: String,
-      enum: ['FOOD', 'GROCERY', 'SHOPPING', 'FLIGHT', 'RIDE'],
+      enum: ['FOOD', 'GROCERY', 'SHOPPING', 'FLIGHT', 'RIDE', 'HOTEL'],
       required: true,
     },
     booking_ref: {
@@ -54,7 +54,7 @@ const bookinghistorySchema = new mongoose.Schema(
     status: {
       type: String,
       default: 'Confirmed',
-      enum: ['Confirmed', 'Pending', 'Cancelled', 'Completed', 'Rejected'],
+      enum: ['Confirmed', 'Pending', 'Cancelled', 'Completed', 'Rejected', "Hold"],
     },
     total_amount: {
       type: Number,
@@ -83,11 +83,19 @@ const bookinghistorySchema = new mongoose.Schema(
     notes: {
       type: String,
     },
-     TraceId: {
+    TraceId: {
       type: String,
     },
     order_id: {
       type: String,
+    },
+    hotel_data: {
+      booking_reference: { type: String },
+      holder: { type: mongoose.Schema.Types.Mixed },
+      rooms: { type: [mongoose.Schema.Types.Mixed], default: [] },
+      checkIn: { type: String },
+      checkOut: { type: String },
+      apiResponse: { type: mongoose.Schema.Types.Mixed },
     },
     flight_data: {
       ItineraryChangeList: { type: mongoose.Schema.Types.Mixed, default: null },
