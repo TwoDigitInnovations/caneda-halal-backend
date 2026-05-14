@@ -149,7 +149,9 @@ module.exports = {
   getShoppingById: async (req, res) => {
     try {
       const userId = req.query.userId;
-      let data = await Shopping.findById(req?.params?.id).populate("shoppingcategory seller_profile");
+      let data = await Shopping.findById(req?.params?.id)
+        .populate("shoppingcategory seller_profile")
+        .populate({ path: 'reviews.userId', select: 'username' });
       const plain = data.toObject();
       const reviews = Array.isArray(plain.reviews) ? plain.reviews : [];
       const totalReviews = reviews.length;
